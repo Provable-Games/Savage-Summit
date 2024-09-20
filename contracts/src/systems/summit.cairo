@@ -15,10 +15,7 @@ trait ISummitSystem {
     fn get_summit_history(world: @IWorldDispatcher, beast_id: u32, lost_at: u64) -> SummitHistory;
     fn get_summit_beast_token_id(world: @IWorldDispatcher) -> u32;
     fn get_summit_beast(world: @IWorldDispatcher) -> Beast;
-    fn get_beast(world: @IWorldDispatcher, id: u32) -> Beast;
-    fn get_beast_stats(world: @IWorldDispatcher, id: u32) -> BeastStats;
-    fn get_beast_stats_live(world: @IWorldDispatcher, id: u32) -> LiveBeastStats;
-    fn get_beast_stats_fixed(world: @IWorldDispatcher, id: u32) -> FixedBeastStats;
+    fn get_beast(world: @IWorldDispatcher, token_id: u32) -> Beast;
 }
 
 #[dojo::contract]
@@ -199,20 +196,8 @@ pub mod summit_systems {
             get!(world, (beast_id, lost_at), SummitHistory)
         }
 
-        fn get_beast(world: @IWorldDispatcher, id: u32) -> Beast {
-            self._get_beast(id)
-        }
-
-        fn get_beast_stats(world: @IWorldDispatcher, id: u32) -> BeastStats {
-            self._get_beast_stats(id)
-        }
-
-        fn get_beast_stats_live(world: @IWorldDispatcher, id: u32) -> LiveBeastStats {
-            get!(world, id, LiveBeastStats)
-        }
-
-        fn get_beast_stats_fixed(world: @IWorldDispatcher, id: u32) -> FixedBeastStats {
-            self._get_beast_fixed_stats(id)
+        fn get_beast(world: @IWorldDispatcher, token_id: u32) -> Beast {
+            self._get_beast(token_id)
         }
     }
 
@@ -403,14 +388,16 @@ pub mod summit_systems {
 
 #[cfg(test)]
 mod tests {
+    use combat::constants::CombatEnums::{Type, Tier};
     use dojo::model::{Model, ModelTest, ModelIndex, ModelEntityTest};
     use dojo::utils::test::deploy_contract;
     use dojo::world::{IWorldDispatcherTrait, IWorldDispatcher};
     use savage_summit::constants::TESTING_CHAIN_ID;
     use super::{summit_systems, ISummitSystemDispatcher, ISummitSystemDispatcherTrait};
-    use savage_summit::models::beast::{
-        Beast, BeastDetails, BeastDetailsStore, BeastStats, BeastStatsStore, Type, Tier
-    };
+    use savage_summit::models::beast::{Beast};
+    use savage_summit::models::beast_details::{BeastDetails};
+    use savage_summit::models::beast_stats::{BeastStats, FixedBeastStats, LiveBeastStats};
+
     use savage_summit::models::consumable::{Consumable, ConsumableDetails, ConsumableDetailsStore};
     use savage_summit::models::summit::{Summit, SummitStore, SummitHistory, SummitHistoryStore};
 
@@ -435,40 +422,37 @@ mod tests {
     fn test_take_summit() {
         let starting_time = 1724927366;
         starknet::testing::set_block_timestamp(starting_time);
+        starknet::testing::set_chain_id(TESTING_CHAIN_ID);
 
         let (world, summit_system) = setup_world();
 
-        let summit = Summit { id: 1, beast_id: 1 };
+        let summit = Summit { id: 1, beast_token_id: 1 };
         let summit_history = SummitHistory {
             id: 1, lost_at: 0, taken_at: starting_time, rewards: 0
         };
 
-        let defender_id = 1;
-        let summit_beast_stats = BeastStats { id: defender_id, health: 100, dead_at: 0, };
-        let summit_beast_details = BeastDetails {
-            id: defender_id,
-            _type: Type::Magic_or_Cloth,
+        let defender_token_id = 1;
+        let savage_live_stats = LiveBeastStats { token_id: defender_token_id, current_health: 100, bonus_health: 0, last_death_timestamp: 0, num_deaths: 0, last_killed_by: 0 };
+        let savage_beast_details = BeastDetails {
+            name: 'Warlcok',
+            elemental: Type::Magic_or_Cloth,
             tier: Tier::T1,
-            level: 5,
-            starting_health: 100
         };
 
-        let attacker_id = 2;
-        let attacking_beast_stats = BeastStats { id: attacker_id, health: 100, dead_at: 0, };
+        let attacker_token_id = 2;
+        let attacking_live_stats = LiveBeastStats { token_id: attacker_token_id, current_health: 100, bonus_health: 0, last_death_timestamp: 0, num_deaths: 0, last_killed_by: 0 };
         let attacking_beast_details = BeastDetails {
-            id: attacker_id,
-            _type: Type::Blade_or_Hide,
+            name: 'Griffin',
+            elemental: Type::Blade_or_Hide,
             tier: Tier::T2,
-            level: 10,
-            starting_health: 100
         };
 
         // inject test data into world
         summit.set_test(world);
         summit_history.set_test(world);
-        summit_beast_stats.set_test(world);
-        summit_beast_details.set_test(world);
-        attacking_beast_stats.set_test(world);
+        savage_live_stats.set_test(world);
+        savage_beast_details.set_test(world);
+        attacking_live_stats.set_test(world);
         attacking_beast_details.set_test(world);
 
         // roll forward time by 100 seconds
@@ -478,33 +462,33 @@ mod tests {
         // set authorizations
         world.grant_writer(Model::<Summit>::selector(), summit_system.contract_address);
         world.grant_writer(Model::<SummitHistory>::selector(), summit_system.contract_address);
-        world.grant_writer(Model::<BeastStats>::selector(), summit_system.contract_address);
+        world.grant_writer(Model::<LiveBeastStats>::selector(), summit_system.contract_address);
 
         // attack the summit with a beast that is stronger than the summit beast
-        summit_system.attack(defender_id, attacker_id, array![]);
+        summit_system.attack(defender_token_id, array![attacker_token_id].span());
 
         // verify the finalized summit history for the previous summit beast
-        let prev_summit_history = summit_system.get_summit_history(defender_id, summit_change_time);
-        assert(prev_summit_history.id == defender_id, 'prev summit id is wrong');
+        let prev_summit_history = summit_system.get_summit_history(defender_token_id, summit_change_time);
+        assert(prev_summit_history.id == defender_token_id, 'prev summit id is wrong');
         assert(prev_summit_history.lost_at == summit_change_time, 'prev summit lost_at is wrong');
         assert(prev_summit_history.taken_at == starting_time, 'prev summit taken_at is wrong');
         assert(prev_summit_history.rewards == 100, 'prev summit rewards is wrong');
 
         // verify the beast prevly on the summit is dead
-        let prev_summit_beast = summit_system.get_beast(defender_id);
-        assert(prev_summit_beast.stats.health == 0, 'prev summit beast health');
-        assert(prev_summit_beast.stats.dead_at == summit_change_time, 'prev summit beast dead_at');
+        let prev_summit_beast = summit_system.get_beast(defender_token_id);
+        assert(prev_summit_beast.stats.live.current_health == 0, 'prev summit beast health');
+        assert(prev_summit_beast.stats.live.last_death_timestamp == summit_change_time, 'prev summit beast dead_at');
 
         // attacker should now be on the summit
         let summit_beast = summit_system.get_summit_beast();
-        assert(summit_beast.id == attacker_id, 'attacker be on summit');
+        assert(summit_beast.token_id == attacker_token_id, 'attacker be on summit');
 
         // attacker should have lost health as part of the attack
-        assert(summit_beast.stats.health < 100, 'attacker should take dmg');
+        assert(summit_beast.stats.live.current_health < 100, 'attacker should take dmg');
 
         // verify we have a new submit history for the new summit beast
-        let new_summit_history = summit_system.get_summit_history(summit_beast.id, 0);
-        assert(new_summit_history.id == attacker_id, 'new summit id is wrong');
+        let new_summit_history = summit_system.get_summit_history(attacker_token_id, 0);
+        assert(new_summit_history.id == attacker_token_id, 'new summit id is wrong');
         assert(new_summit_history.lost_at == 0, 'new summit lost_at is wrong');
         assert(new_summit_history.taken_at == summit_change_time, 'new summit taken_at is wrong');
         assert(new_summit_history.rewards == 0, 'new summit rewards is wrong');

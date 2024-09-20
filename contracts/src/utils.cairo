@@ -7,7 +7,7 @@ fn get_beast_address(chain_id: felt252) -> ContractAddress {
     } else if chain_id == MAINNET_CHAIN_ID {
         BEAST_ADDRESS_MAINNET()
     } else {
-        panic_with_felt252('Chain not supported')
+        BEAST_ADDRESS_TESTING()
     }
 }
 
@@ -26,3 +26,9 @@ fn BEAST_ADDRESS_MAINNET() -> ContractAddress {
 fn BEAST_ADDRESS_SEPOLIA() -> ContractAddress {
     contract_address_const::<0x041b6ffc02ce30c6e941f1b34244ef8af0b3e8a70f5528476a7a68765afd6b39>()
 }
+
+fn BEAST_ADDRESS_TESTING() -> ContractAddress {
+    // TODO: Change this to the actual address
+    contract_address_const::<0x01>()
+}
+
