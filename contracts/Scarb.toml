@@ -10,7 +10,8 @@ sierra-replace-ids = true
 dojo = { git = "https://github.com/dojoengine/dojo", tag = "v1.0.0-alpha.11" }
 openzeppelin_token = { git = "https://github.com/OpenZeppelin/cairo-contracts", tag = "v0.15.1" }
 combat = { git = "https://github.com/Provable-Games/loot-survivor.git", branch = "feat/savage-summit-support" }
-beasts = { git = "https://github.com/leetship/beasts.git", branch = "main" }
+game = { git = "https://github.com/Provable-Games/loot-survivor.git", branch = "feat/savage-summit-support" }
+pixel_beasts = { git = "https://github.com/leetship/beasts.git" }
 
 [dev-dependencies]
 openzeppelin_test_common = { git = "https://github.com/OpenZeppelin/cairo-contracts", tag = "v0.15.1" }

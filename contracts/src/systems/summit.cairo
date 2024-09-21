@@ -20,13 +20,15 @@ trait ISummitSystem {
 
 #[dojo::contract]
 pub mod summit_systems {
-    use beasts::interfaces::{IBeasts, IBeastsDispatcher, IBeastsDispatcherTrait};
-    use beasts::pack::PackableBeast;
+    use core::num::traits::Sqrt;
+    use pixel_beasts::interfaces::{IBeasts, IBeastsDispatcher, IBeastsDispatcherTrait};
+    use pixel_beasts::pack::PackableBeast;
     use combat::constants::CombatEnums::{Type, Tier};
     use combat::combat::{ImplCombat, CombatSpec, CombatResult, SpecialPowers};
+    use game::game::interfaces::{IGame, IGameDispatcher, IGameDispatcherTrait};
     use core::num::traits::{OverflowingAdd, OverflowingSub};
     use openzeppelin_token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
-    use savage_summit::constants::{errors, BASE_REVIVAL_TIME_SECONDS, MINIMUM_DAMAGE, MAX_U32};
+    use savage_summit::constants::{errors, BASE_REVIVAL_TIME_SECONDS, MINIMUM_DAMAGE, MAX_U32, BEAST_MAX_HEALTH, TEN_DAYS_SECONDS};
     use savage_summit::models::adventurer::Adventurer;
     use savage_summit::models::beast::{Beast, ImplBeast};
     use savage_summit::models::beast_details::{BeastDetails, ImplBeastDetails};
@@ -150,33 +152,23 @@ pub mod summit_systems {
 
             let mut beast = self._get_beast(beast_token_id);
 
+            let summit_beast_token_id = self._get_summit_beast_token_id();
+
             let mut i = 0;
             while (i < adventurer_ids.len()) {
                 let adventurer_id = *adventurer_ids.at(i);
+                let adventurer = self._get_adventurer(adventurer_id);
 
                 self._assert_adventurer_ownership(adventurer_id);
-                assert(
-                    get!(world, (adventurer_id), Adventurer).beast_token_id == 0,
-                    'Adventurer already consumed'
-                );
+                self._assert_beast_can_consume(beast, adventurer);
 
-                //TODO: get adventurer details
-                //TODO: verify adventurer is dead and maybe not ranked
-
-                set!(world, (Adventurer { token_id: adventurer_id, beast_token_id }));
+                beast.stats.live.bonus_health += adventurer.level.into();
+                if beast_token_id == summit_beast_token_id {
+                    beast.stats.live.current_health += adventurer.level.into();
+                }
 
                 i += 1;
             };
-
-            let summit_beast_token_id = self._get_summit_beast_token_id();
-            let total_bonus_health = adventurer_ids.len();
-
-            //TODO: Check overflow on health
-            if beast_token_id == summit_beast_token_id {
-                beast.stats.live.current_health += total_bonus_health;
-            }
-
-            beast.stats.live.bonus_health += total_bonus_health;
 
             set!(world, (beast.stats.live));
         }
@@ -242,6 +234,21 @@ pub mod summit_systems {
                 special_2: beast.suffix,
                 level: beast.level,
                 starting_health: beast.health,
+            }
+        }
+
+        fn _get_adventurer(self: @ContractState, token_id: u64) -> Adventurer {
+            let adventurer_address = utils::ADVENTURER_ADDRESS_MAINNET();
+            let game_dispatcher = IGameDispatcher { contract_address: adventurer_address };
+
+            let adventurer = game_dispatcher.get_adventurer(token_id.into());
+            let adventurer_meta = game_dispatcher.get_adventurer_meta(token_id.into());
+
+            Adventurer {
+                level: Self::_get_level_from_xp(adventurer.xp),
+                health: adventurer.health,
+                birth_date: adventurer_meta.birth_date,
+                rank_at_death: adventurer_meta.rank_at_death,
             }
         }
 
@@ -341,7 +348,7 @@ pub mod summit_systems {
         /// @param token_id the id of the adventurer
         /// @return ContractAddress the owner of the adventurer
         fn _get_owner_of_adventurer(self: @ContractState, token_id: u64) -> ContractAddress {
-            let contract_address = utils::get_adventurer_address();
+            let contract_address = utils::ADVENTURER_ADDRESS_MAINNET();
             let erc721_dispatcher = IERC721Dispatcher { contract_address };
             erc721_dispatcher.owner_of(token_id.into())
         }
@@ -374,7 +381,7 @@ pub mod summit_systems {
             assert(attacking_owner != summit_owner, errors::BEAST_ATTACKING_OWN_BEAST);
         }
 
-        /// @title assert_beast_is_revived
+        /// @title assert_beast_can_attack
         /// @notice this function is used to assert that a beast is revived
         /// @param live_beast_stats the stats of the beast to check
         fn _assert_beast_can_attack(self: @ContractState, live_beast_stats: LiveBeastStats) {
@@ -382,6 +389,28 @@ pub mod summit_systems {
             let current_time = get_block_timestamp();
             let time_since_death = current_time - last_death_timestamp;
             assert(time_since_death >= BASE_REVIVAL_TIME_SECONDS, errors::BEAST_NOT_YET_REVIVED);
+        }
+
+        /// @title assert_beast_can_consume
+        /// @notice this function is used to assert that a beast can consume an adventurer
+        /// @param beast the beast to check
+        /// @param adventurer the adventurer to check
+        fn _assert_beast_can_consume(self: @ContractState, beast: Beast, adventurer: Adventurer) {
+            let total_health = beast.stats.live.bonus_health + beast.stats.fixed.starting_health.into();
+            assert(total_health <= BEAST_MAX_HEALTH, errors::BEAST_MAX_HEALTH);
+            assert(adventurer.health == 0, errors::ADVENTURER_ALIVE);
+            assert(adventurer.rank_at_death == 0, errors::ADVENTURER_RANKED);
+        }
+
+        /// @notice: gets level from xp
+        /// @param xp: the xp to get the level for
+        /// @return u8: the level for the given xp
+        fn _get_level_from_xp(xp: u16) -> u8 {
+            if (xp == 0) {
+                1
+            } else {
+                xp.sqrt()
+            }
         }
     }
 }

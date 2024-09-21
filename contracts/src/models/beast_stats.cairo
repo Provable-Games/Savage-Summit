@@ -6,6 +6,7 @@ pub struct BeastStats {
 
 #[derive(Copy, Drop, Introspect, Serde)]
 pub struct FixedBeastStats {
+    // TODO: move beast_id to BeastDetails
     pub beast_id: u8,
     pub level: u16,
     pub starting_health: u16,

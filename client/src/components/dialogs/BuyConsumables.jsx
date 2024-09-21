@@ -9,7 +9,17 @@ import { BuyConsumablesButton } from '../../helpers/styles';
 const POTIONS = [
   {
     name: 'revive potion',
-    description: 'Speeds up recovery of a beast by 1 hour.',
+    description: 'Revives a beast. Amount required varies on beast tier.',
+    cost: 0.25
+  },
+  {
+    name: 'attack potion',
+    description: 'Doubles the damage of a beast\'s next attack. Can be stacked.',
+    cost: 0.25
+  },
+  {
+    name: 'Extra life potion',
+    description: 'Revives a beast to full health when it dies.',
     cost: 0.25
   },
 ]
@@ -59,7 +69,7 @@ function BuyConsumables(props) {
                           Cost
                         </Typography>
                         <Typography sx={{ letterSpacing: '0.5px', fontSize: '13px', opacity: 0.8 }}>
-                          ${potion.cost}
+                          ~${potion.cost}
                         </Typography>
                       </Box>
                     </Box>
@@ -119,7 +129,8 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     boxSizing: 'border-box',
-    minWidth: '500px',
+    width: '800px',
+    maxWidth: '98vw',
     p: 3
   },
   container: {
@@ -135,7 +146,7 @@ const styles = {
     height: '100%',
     display: 'flex',
     justifyContent: 'center',
-    gap: 1
+    gap: 2
   },
   itemContainer: {
     width: '180px',
